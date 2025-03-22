@@ -1,0 +1,3 @@
+messages:
+  only-for-player: 'This command is only available to players.'
+  not-enough-perms: 'You dont have enough permissions to execute this command.'
