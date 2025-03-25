@@ -149,6 +149,8 @@ class DatabaseManager @Inject constructor(
     }
 
     fun saveAllPlayersInfo(data: Map<UUID, String>) {
+        if (data.isEmpty()) return
+
         getConnection().use { conn ->
             val deleteQuery = """
                 DELETE FROM player_purchases 

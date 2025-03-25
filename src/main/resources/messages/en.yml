@@ -1,3 +1,6 @@
 messages:
   only-for-player: 'This command is only available to players.'
-  not-enough-perms: 'You dont have enough permissions to execute this command.'
+  not-enough-perms: "You don't have enough permissions to execute this command."
+  player-not-found: 'The player is offline.'
+
+  purchases-opened: "You've opened purchases to %player%."

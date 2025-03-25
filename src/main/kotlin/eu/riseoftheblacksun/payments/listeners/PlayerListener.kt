@@ -16,7 +16,6 @@ class PlayerListener @Inject constructor(
 ) : Listener {
     @EventHandler
     fun onPlayerJoin(event: PlayerJoinEvent) {
-        println("player joined: ${event.player.name}")
         val pair = databaseManager.getPlayerInfo(event.player.uniqueId) ?: return
         val commandsString = pair.first
         val items = pair.second
