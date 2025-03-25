@@ -2,7 +2,7 @@ package eu.riseoftheblacksun.payments.providers
 
 import com.google.inject.Inject
 import com.google.inject.Provider
-import eu.riseoftheblacksun.payments.commands.PurchaseCommand
+import eu.riseoftheblacksun.payments.commands.PurchasesCommand
 import eu.riseoftheblacksun.payments.config.ConfigManager
 import eu.riseoftheblacksun.payments.data.DatabaseManager
 import eu.riseoftheblacksun.payments.domain.CacheManager
@@ -10,16 +10,16 @@ import eu.riseoftheblacksun.payments.domain.MessageService
 import eu.riseoftheblacksun.payments.domain.RewardsManager
 import eu.riseoftheblacksun.payments.listeners.PlayerListener
 import eu.riseoftheblacksun.payments.logs.Logger
-import eu.riseoftheblacksun.payments.messaging.KafkaService
+import eu.riseoftheblacksun.payments.messaging.RabbitMQService
 import org.bukkit.plugin.Plugin
 
-class KafkaServiceProvider @Inject constructor(
+class RabbitMQServiceProvider @Inject constructor(
     private val configManager: ConfigManager,
     private val rewardsManager: RewardsManager,
     private val logger: Logger
-) : Provider<KafkaService> {
-    override fun get(): KafkaService {
-        return KafkaService(configManager, rewardsManager, logger)
+) : Provider<RabbitMQService> {
+    override fun get(): RabbitMQService {
+        return RabbitMQService(configManager, rewardsManager, logger)
     }
 }
 
@@ -47,8 +47,8 @@ class PlayerListenerProvider @Inject constructor(
 class PurchaseCommandProvider @Inject constructor(
     private val cacheManager: CacheManager,
     private val messageService: MessageService
-) : Provider<PurchaseCommand> {
-    override fun get(): PurchaseCommand {
-        return PurchaseCommand(cacheManager, messageService)
+) : Provider<PurchasesCommand> {
+    override fun get(): PurchasesCommand {
+        return PurchasesCommand(cacheManager, messageService)
     }
 }

@@ -1,0 +1,8 @@
+{
+  "host": "localhost",
+  "port": "5672",
+  "virtual_host": "/",
+  "username": "root",
+  "password": "123",
+  "queue_name": "purchases_queue"
+}

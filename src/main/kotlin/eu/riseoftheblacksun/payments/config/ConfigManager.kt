@@ -3,27 +3,21 @@ package eu.riseoftheblacksun.payments.config
 import eu.riseoftheblacksun.payments.utils.JsonUtil
 import org.bukkit.configuration.file.YamlConfiguration
 import java.io.File
-import java.util.*
 
 class ConfigManager(private val dataFolder: File) {
     val config: YamlConfiguration
 
-    val kafkaConfig: Properties
-        get() = getJSONConfig("kafka-config.json")
+    val rabbitConfig: Map<String, String>
+        get() = getJSONConfig("rabbit-config.json")
 
     init {
         config = loadOrCreate("config.yml")
     }
 
-    private fun getJSONConfig(fileName: String): Properties {
+    private fun getJSONConfig(fileName: String): Map<String, String> {
         val file = ensureFileExists(fileName)
         val configMap: Map<String, String> = JsonUtil.fromJson(file.readText())
-
-        val props = Properties()
-        configMap.forEach { (key, value) ->
-            props[key] = value
-        }
-        return props
+        return configMap
     }
 
     private fun loadOrCreate(fileName: String): YamlConfiguration {

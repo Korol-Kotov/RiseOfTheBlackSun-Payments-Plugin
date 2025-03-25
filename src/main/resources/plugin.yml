@@ -1,13 +1,16 @@
 name: Payments
 version: '1.0'
 main: eu.riseoftheblacksun.payments.Payments
-api-version: '1.20'
+api-version: '1.21'
 
 permissions:
-  payments.command:
-    description: 'Permission to use the /purchase command'
+  payments.purchases:
+    description: 'Permission to use the /purchases command'
+
+  payments.purchases.others:
+    description: 'Permission to use the /purchases command on others'
 
 commands:
-  purchase:
-    description: 'Command to view and take items from purchase'
+  purchases:
+    description: 'Command to view and take items from purchases'
     default: false
