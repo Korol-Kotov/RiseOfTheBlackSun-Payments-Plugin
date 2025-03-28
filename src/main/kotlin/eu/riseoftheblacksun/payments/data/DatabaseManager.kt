@@ -56,7 +56,7 @@ class DatabaseManager @Inject constructor(
         sqliteConnection = DriverManager.getConnection("jdbc:sqlite:${databaseFile.absolutePath}")
     }
 
-    fun getConnection(): Connection {
+    private fun getConnection(): Connection {
         return when (databaseType.lowercase()) {
             "mysql" -> dataSource!!.connection
             "sqlite" -> sqliteConnection!!
@@ -65,26 +65,40 @@ class DatabaseManager @Inject constructor(
     }
 
     fun registerPlayer(uniqueId: UUID, playerName: String) {
-        getConnection().use { conn ->
-            val query = "INSERT INTO players (uuid, name) SELECT ?, ? WHERE NOT EXISTS (SELECT 1 FROM players WHERE uuid = ? OR name = ?)"
-            conn.prepareStatement(query).use { stmt ->
-                stmt.setString(1, uniqueId.toString())
-                stmt.setString(2, playerName)
+        val conn = getConnection()
+        val query = when (databaseType) {
+            "sqlite" -> """
+                INSERT OR IGNORE INTO players (uuid, name) VALUES (?, ?);
+                """
+            else -> """
+                INSERT INTO players (uuid, name) 
+                SELECT ?, ? FROM DUAL 
+                WHERE NOT EXISTS (SELECT 1 FROM players WHERE uuid = ? OR name = ?);
+                """
+        }.trimIndent()
+
+        conn.prepareStatement(query).use { stmt ->
+            stmt.setString(1, uniqueId.toString())
+            stmt.setString(2, playerName)
+            if (databaseType.equals("mysql", true)) {
                 stmt.setString(3, uniqueId.toString())
                 stmt.setString(4, playerName)
-                stmt.executeUpdate()
             }
+            stmt.executeUpdate()
         }
+        if (databaseType == "mysql") conn.close()
     }
 
     fun getPlayerData(uniqueIds: List<UUID>): Map<UUID, Pair<String, String>> {
-        val result = mutableMapOf<UUID, Pair<String, String>>()
         if (uniqueIds.isEmpty()) return emptyMap()
-        getConnection().use { conn ->
-            val query = "SELECT player_uuid, commands, items FROM player_purchases WHERE player_uuid IN (${uniqueIds.joinToString { "?" }})"
-            conn.prepareStatement(query).use { stmt ->
-                uniqueIds.forEachIndexed { index, uuid -> stmt.setString(index + 1, uuid.toString()) }
-                val rs = stmt.executeQuery()
+        val conn = getConnection()
+        val result = mutableMapOf<UUID, Pair<String, String>>()
+        val query = "SELECT player_uuid, commands, items FROM player_purchases WHERE player_uuid IN (${uniqueIds.joinToString(",") { "?" }})"
+
+        conn.prepareStatement(query).use { stmt ->
+            uniqueIds.forEachIndexed { index, uuid -> stmt.setString(index + 1, uuid.toString()) }
+
+            stmt.executeQuery().use { rs ->
                 while (rs.next()) {
                     val uuid = UUID.fromString(rs.getString("player_uuid"))
                     val commands = rs.getString("commands")
@@ -93,95 +107,124 @@ class DatabaseManager @Inject constructor(
                 }
             }
         }
+        if (databaseType == "mysql") conn.close()
         return result
     }
 
     fun getPlayerInfo(uniqueId: UUID): Pair<String, String>? {
-        getConnection().use { conn ->
-            val query = "SELECT commands, items FROM player_purchases WHERE player_uuid = ?"
-            conn.prepareStatement(query).use { stmt ->
-                stmt.setString(1, uniqueId.toString())
-                val rs = stmt.executeQuery()
+        val conn = getConnection()
+        var result: Pair<String, String>? = null
+        val query = "SELECT commands, items FROM player_purchases WHERE player_uuid = ?"
+        conn.prepareStatement(query).use { stmt ->
+            stmt.setString(1, uniqueId.toString())
+            stmt.executeQuery().use { rs ->
                 if (rs.next()) {
-                    return rs.getString("commands") to rs.getString("items")
+                    result = rs.getString("commands") to rs.getString("items")
                 }
             }
         }
-        return null
+        if (databaseType == "mysql") conn.close()
+        return result
     }
 
     fun setPlayerInfo(uniqueId: UUID, commands: String, items: String) {
-        getConnection().use { conn ->
-            val query = """
+        val conn = getConnection()
+        val query = when (databaseType) {
+            "sqlite" -> """
+                INSERT INTO player_purchases (player_uuid, commands, items) 
+                VALUES (?, ?, ?) 
+                ON CONFLICT(player_uuid) DO UPDATE SET 
+                    commands = excluded.commands, 
+                    items = excluded.items;
+                """
+            else -> """
                 INSERT INTO player_purchases (player_uuid, commands, items) 
                 VALUES (?, ?, ?) 
                 ON DUPLICATE KEY UPDATE 
                     commands = VALUES(commands), 
                     items = VALUES(items)
-            """.trimIndent()
+                """
+        }.trimIndent()
 
-            conn.prepareStatement(query).use { stmt ->
-                stmt.setString(1, uniqueId.toString())
-                stmt.setString(2, commands)
-                stmt.setString(3, items)
-                stmt.executeUpdate()
-            }
+        conn.prepareStatement(query).use { stmt ->
+            stmt.setString(1, uniqueId.toString())
+            stmt.setString(2, commands)
+            stmt.setString(3, items)
+            stmt.executeUpdate()
         }
+        if (databaseType == "mysql") conn.close()
     }
 
     fun addPlayerInfo(uniqueId: UUID, commands: String, items: String) {
-        getConnection().use { conn ->
-            val query = """
+        val conn = getConnection()
+        val query = when (databaseType) {
+            "sqlite" -> """
+                INSERT INTO player_purchases (player_uuid, commands, items) 
+                VALUES (?, ?, ?) 
+                ON CONFLICT(player_uuid) DO UPDATE SET 
+                    commands = commands || ';' || excluded.commands, 
+                    items = items || ';' || excluded.items;
+                """
+            else -> """
                 INSERT INTO player_purchases (player_uuid, commands, items) 
                 VALUES (?, ?, ?) 
                 ON DUPLICATE KEY UPDATE 
                     commands = CONCAT(commands, ';', VALUES(commands)), 
                     items = CONCAT(items, ';', VALUES(items))
-            """.trimIndent()
+                """
+        }.trimIndent()
 
-            conn.prepareStatement(query).use { stmt ->
-                stmt.setString(1, uniqueId.toString())
-                stmt.setString(2, commands)
-                stmt.setString(3, items)
-                stmt.executeUpdate()
-            }
+        conn.prepareStatement(query).use { stmt ->
+            stmt.setString(1, uniqueId.toString())
+            stmt.setString(2, commands)
+            stmt.setString(3, items)
+            stmt.executeUpdate()
         }
+        if (databaseType == "mysql") conn.close()
     }
 
     fun saveAllPlayersInfo(data: Map<UUID, String>) {
         if (data.isEmpty()) return
 
-        getConnection().use { conn ->
-            val deleteQuery = """
-                DELETE FROM player_purchases 
-                WHERE player_uuid = ? 
-                AND (commands = '')
-            """.trimIndent()
+        val conn = getConnection()
+        val deleteQuery = """
+            DELETE FROM player_purchases 
+            WHERE player_uuid = ? 
+            AND (commands = '')
+        """.trimIndent()
 
-            val insertOrUpdateQuery = """
+        val insertOrUpdateQuery = when (databaseType) {
+            "sqlite" -> """
+                INSERT INTO player_purchases (player_uuid, commands, items) 
+                VALUES (?, '', ?) 
+                ON CONFLICT(player_uuid) DO UPDATE SET 
+                    items = excluded.items
+                """
+            else -> """
                 INSERT INTO player_purchases (player_uuid, commands, items) 
                 VALUES (?, '', ?) 
                 ON DUPLICATE KEY UPDATE 
                     items = VALUES(items)
-            """.trimIndent()
+                """
+        }.trimIndent()
 
-            conn.prepareStatement(deleteQuery).use { deleteStmt ->
-                conn.prepareStatement(insertOrUpdateQuery).use { insertStmt ->
-                    for ((uniqueId, items) in data) {
-                        if (items.isEmpty()) {
-                            deleteStmt.setString(1, uniqueId.toString())
-                            deleteStmt.addBatch()
-                        } else {
-                            insertStmt.setString(1, uniqueId.toString())
-                            insertStmt.setString(2, items)
-                            insertStmt.addBatch()
-                        }
+        conn.prepareStatement(deleteQuery).use { deleteStmt ->
+            conn.prepareStatement(insertOrUpdateQuery).use { insertStmt ->
+                for ((uniqueId, items) in data) {
+                    if (items.isEmpty()) {
+                        deleteStmt.setString(1, uniqueId.toString())
+                        deleteStmt.addBatch()
+                    } else {
+                        insertStmt.setString(1, uniqueId.toString())
+                        insertStmt.setString(2, items)
+                        insertStmt.addBatch()
                     }
-                    deleteStmt.executeBatch()
-                    insertStmt.executeBatch()
                 }
+                deleteStmt.executeBatch()
+                insertStmt.executeBatch()
             }
         }
+        if (databaseType == "mysql") conn.close()
     }
 
 
@@ -191,8 +234,8 @@ class DatabaseManager @Inject constructor(
     }
 
     private fun initializeSchema() {
-        getConnection().use { conn ->
-            val schemaStatements = listOf(
+        val conn = getConnection()
+        val schemaStatements = listOf(
             """
             CREATE TABLE IF NOT EXISTS players (
                 uuid CHAR(36) PRIMARY KEY,
@@ -212,11 +255,11 @@ class DatabaseManager @Inject constructor(
                 FOREIGN KEY (player_uuid) REFERENCES players (uuid) ON DELETE CASCADE
             );
             """
-            )
-            conn.createStatement().use { stmt ->
-                schemaStatements.forEach { stmt.addBatch(it) }
-                stmt.executeBatch()
-            }
+        )
+        conn.createStatement().use { stmt ->
+            schemaStatements.forEach { stmt.addBatch(it) }
+            stmt.executeBatch()
         }
+        if (databaseType == "mysql") conn.close()
     }
 }

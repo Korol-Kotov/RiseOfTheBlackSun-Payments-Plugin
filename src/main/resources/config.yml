@@ -2,6 +2,8 @@ plugin:
   debug: false
   language: en
 
+server-id: 'server1'
+
 database:
   type: "sqlite"
 

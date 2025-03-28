@@ -10,7 +10,7 @@ import java.util.*
 import kotlin.NoSuchElementException
 
 class RabbitMQService @Inject constructor(
-    configManager: ConfigManager,
+    private val configManager: ConfigManager,
     private val rewardsManager: RewardsManager,
     private val logger: Logger
 ) {
@@ -75,8 +75,11 @@ class RabbitMQService @Inject constructor(
 
     private fun handleEvent(value: String) {
         val json: Map<String, String> = JsonUtil.fromJson(value)
+        val serverId = json["serverID"] ?: throw NoSuchElementException("Required parameter 'serverID' is missing in JSON")
+        if (configManager.config.getString("server-id") != serverId) return
+
         val playerName = json["playerName"] ?: throw NoSuchElementException("Required parameter 'playerName' is missing in JSON")
-        val body = json["body"] ?: return
+        val body = json["body"] ?: throw NoSuchElementException("Required parameter 'body' is missing in JSON")
         val decodedBody = String(Base64.getDecoder().decode(body), Charsets.UTF_8)
         val bodyJson: Map<String, List<String>> = JsonUtil.fromJson(decodedBody)
 
